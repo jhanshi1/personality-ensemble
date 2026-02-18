@@ -11,6 +11,8 @@ from src.features.emotion_features import (
 )
 from sklearn.feature_extraction.text import CountVectorizer
 from scipy.sparse import hstack
+import numpy as np
+import os
 
 def build_features(X_train, X_val, X_test):
 
@@ -94,6 +96,9 @@ def train_lr(X_train, y_train):
 
 if __name__ == "__main__":
 
+    ARTIFACT_DIR = "artifacts/classic"
+    os.makedirs(ARTIFACT_DIR, exist_ok=True)
+
     print("Loading data...")
     X_train, X_val, X_test, y_train, y_val, y_test = load_pre_split_data()
 
@@ -105,6 +110,28 @@ if __name__ == "__main__":
     print("Training Logistic Regression...")
     model = train_lr(X_train_vec, y_train)
 
+    # ---- Evaluation ----
     evaluate_model(model, X_train_vec, y_train, "Train")
     evaluate_model(model, X_val_vec, y_val, "Validation")
     evaluate_model(model, X_test_vec, y_test, "Test")
+
+    # ---- Save Probabilities for Stacking ----
+    print("\nSaving LR probabilities for stacking...")
+
+    lr_val_probs = model.predict_proba(X_val_vec)
+    lr_test_probs = model.predict_proba(X_test_vec)
+
+    # Handle OneVsRestClassifier output shape safety
+    if isinstance(lr_val_probs, list):
+        lr_val_probs = np.column_stack([p[:, 1] for p in lr_val_probs])
+
+    if isinstance(lr_test_probs, list):
+        lr_test_probs = np.column_stack([p[:, 1] for p in lr_test_probs])
+
+    np.save(f"{ARTIFACT_DIR}/lr_val_probs.npy", lr_val_probs)
+    np.save(f"{ARTIFACT_DIR}/lr_test_probs.npy", lr_test_probs)
+
+    print("Saved:")
+    print(" - lr_val_probs.npy", lr_val_probs.shape)
+    print(" - lr_test_probs.npy", lr_test_probs.shape)
+

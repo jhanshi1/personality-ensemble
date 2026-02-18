@@ -10,7 +10,7 @@ class BiGRUClassifier(nn.Module):
 
         self.embedding = nn.Embedding(vocab_size, embed_dim)
         self.embedding.weight.data.copy_(torch.tensor(embedding_matrix))
-        self.embedding.weight.requires_grad = True # freeze GloVe
+        self.embedding.weight.requires_grad = False # freeze GloVe
 
         self.bigru = nn.GRU(
             embed_dim,

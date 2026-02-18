@@ -12,6 +12,8 @@ from src.features.emotion_features import (
     load_nrc_lexicon,
     extract_emotion_features
 )
+import numpy as np
+from sklearn.calibration import CalibratedClassifierCV
 
 
 def build_features(X_train, X_val, X_test):
@@ -67,20 +69,27 @@ def build_features(X_train, X_val, X_test):
 
 
 def train_svm(X_train, y_train):
-
-    model = OneVsRestClassifier(
-        LinearSVC(
-            C=0.01,
-            class_weight="balanced",
-            max_iter=5000
-        )
+    base_svm = LinearSVC(
+        C=0.01,
+        class_weight="balanced",
+        max_iter=5000
     )
 
+    calibrated_svm = CalibratedClassifierCV(
+        base_svm,
+        method="sigmoid",
+        cv=3
+    )
+
+    model = OneVsRestClassifier(calibrated_svm)
     model.fit(X_train, y_train)
     return model
 
 
 if __name__ == "__main__":
+
+    ARTIFACT_DIR = "artifacts/classic"
+    os.makedirs(ARTIFACT_DIR, exist_ok=True)
 
     print("Loading pre-split data...")
     X_train, X_val, X_test, y_train, y_val, y_test = load_pre_split_data()
@@ -88,9 +97,28 @@ if __name__ == "__main__":
     print("Building features...")
     X_train_vec, X_val_vec, X_test_vec = build_features(X_train, X_val, X_test)
 
-    print("Training LinearSVC...")
+    print("Training LinearSVC (Calibrated)...")
     model = train_svm(X_train_vec, y_train)
 
     evaluate_model(model, X_train_vec, y_train, "Train")
     evaluate_model(model, X_val_vec, y_val, "Validation")
     evaluate_model(model, X_test_vec, y_test, "Test")
+
+    # ---- Save Probabilities ----
+    print("\nSaving SVM probabilities for stacking...")
+
+    svm_val_probs = model.predict_proba(X_val_vec)
+    svm_test_probs = model.predict_proba(X_test_vec)
+
+    if isinstance(svm_val_probs, list):
+        svm_val_probs = np.column_stack([p[:, 1] for p in svm_val_probs])
+
+    if isinstance(svm_test_probs, list):
+        svm_test_probs = np.column_stack([p[:, 1] for p in svm_test_probs])
+
+    np.save(f"{ARTIFACT_DIR}/svm_val_probs.npy", svm_val_probs)
+    np.save(f"{ARTIFACT_DIR}/svm_test_probs.npy", svm_test_probs)
+
+    print("Saved:")
+    print(" - svm_val_probs.npy", svm_val_probs.shape)
+    print(" - svm_test_probs.npy", svm_test_probs.shape)

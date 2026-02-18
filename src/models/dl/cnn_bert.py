@@ -9,9 +9,14 @@ class CNNBERTClassifier(nn.Module):
 
         self.bert = BertModel.from_pretrained("bert-base-uncased")
 
-        # Freeze BERT (important for CPU)
+        # Freeze everything first
         for param in self.bert.parameters():
             param.requires_grad = False
+
+        # Unfreeze last 2 encoder layers
+        for param in self.bert.encoder.layer[-2:].parameters():
+            param.requires_grad = True
+
 
         self.conv = nn.Conv1d(
             in_channels=768,
