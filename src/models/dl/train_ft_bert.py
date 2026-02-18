@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import os
+import json
 from torch.utils.data import DataLoader, TensorDataset
 from transformers import BertModel
 from src.data.loader import load_pre_split_data
@@ -18,7 +19,7 @@ MAX_LEN = 64
 NUM_LABELS = 5
 
 ARTIFACT_DIR = "artifacts/dl_data"
-os.makedirs(ARTIFACT_DIR, exist_ok=True)
+RESULTS_DIR = "artifacts/results"
 
 
 # -------------------- Model -------------------- #
@@ -50,6 +51,9 @@ class FineTunedBERT(torch.nn.Module):
 
 def main():
 
+    os.makedirs(ARTIFACT_DIR, exist_ok=True)
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+
     print("Loading split data...")
     train_texts, val_texts, test_texts, y_train, y_val, y_test = load_pre_split_data()
 
@@ -58,11 +62,11 @@ def main():
     val_ids, val_mask = tokenize_bert(val_texts, max_len=MAX_LEN)
     test_ids, test_mask = tokenize_bert(test_texts, max_len=MAX_LEN)
 
-    y_train = torch.tensor(y_train, dtype=torch.float32)
-    y_val = torch.tensor(y_val, dtype=torch.float32)
+    y_train_tensor = torch.tensor(y_train, dtype=torch.float32)
+    y_val_tensor = torch.tensor(y_val, dtype=torch.float32)
 
-    train_dataset = TensorDataset(train_ids, train_mask, y_train)
-    val_dataset = TensorDataset(val_ids, val_mask, y_val)
+    train_dataset = TensorDataset(train_ids, train_mask, y_train_tensor)
+    val_dataset = TensorDataset(val_ids, val_mask, y_val_tensor)
     test_dataset = TensorDataset(test_ids, test_mask)
 
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
@@ -88,15 +92,11 @@ def main():
             labels = labels.to(device)
 
             optimizer.zero_grad()
-
             logits = model(input_ids, attention_mask)
             loss = criterion(logits, labels)
-
             loss.backward()
 
-            # Gradient clipping (important for stability)
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-
             optimizer.step()
 
             total_loss += loss.item()
@@ -105,83 +105,62 @@ def main():
         print(f"Epoch {epoch+1}/{EPOCHS} - Train Loss: {avg_loss:.4f}")
 
     print("\nTraining complete.")
-        # -------------------- Train Probabilities -------------------- #
-
-    print("\nGenerating train probabilities...")
-
     model.eval()
+
+    # -------------------- TRAIN PROBS -------------------- #
     train_probs = []
-
     with torch.no_grad():
-        for input_ids, attention_mask, labels in train_loader:
-
+        for input_ids, attention_mask, _ in train_loader:
             input_ids = input_ids.to(device)
             attention_mask = attention_mask.to(device)
-
-            logits = model(input_ids, attention_mask)
-            probs = torch.sigmoid(logits)
-
+            probs = torch.sigmoid(model(input_ids, attention_mask))
             train_probs.append(probs.cpu())
 
     train_probs = torch.cat(train_probs, dim=0).numpy()
-
     np.save(f"{ARTIFACT_DIR}/ftbert_train_probs.npy", train_probs)
 
-    print("Saved ftbert_train_probs.npy", train_probs.shape)
-
-    # -------------------- Validation -------------------- #
-
-    print("\nEvaluating validation performance...")
-
-    model.eval()
+    # -------------------- VAL PROBS -------------------- #
     val_probs = []
-
     with torch.no_grad():
-        for input_ids, attention_mask, labels in val_loader:
-
+        for input_ids, attention_mask, _ in val_loader:
             input_ids = input_ids.to(device)
             attention_mask = attention_mask.to(device)
-
-            logits = model(input_ids, attention_mask)
-            probs = torch.sigmoid(logits)
-
+            probs = torch.sigmoid(model(input_ids, attention_mask))
             val_probs.append(probs.cpu())
 
     val_probs = torch.cat(val_probs, dim=0).numpy()
-    val_preds = (val_probs >= 0.5).astype(int)
+    np.save(f"{ARTIFACT_DIR}/ftbert_val_probs.npy", val_probs)
+
+    # -------------------- TEST PROBS -------------------- #
+    test_probs = []
+    with torch.no_grad():
+        for input_ids, attention_mask in test_loader:
+            input_ids = input_ids.to(device)
+            attention_mask = attention_mask.to(device)
+            probs = torch.sigmoid(model(input_ids, attention_mask))
+            test_probs.append(probs.cpu())
+
+    test_probs = torch.cat(test_probs, dim=0).numpy()
+    np.save(f"{ARTIFACT_DIR}/ftbert_test_probs.npy", test_probs)
+
+    print("Saved stacking probabilities.")
+
+    # -------------------- TEST EVALUATION -------------------- #
+    test_preds = (test_probs >= 0.5).astype(int)
 
     metrics = evaluate_predictions(
-        y_val.numpy(),
-        val_preds,
-        name="Fine-Tuned BERT Validation"
+        y_test,
+        test_preds,
+        name="Fine-Tuned BERT Test"
     )
 
     print(metrics)
 
-    np.save(f"{ARTIFACT_DIR}/ftbert_val_probs.npy", val_probs)
+    # -------------------- SAVE METRICS -------------------- #
+    with open(f"{RESULTS_DIR}/ftbert_metrics.json", "w") as f:
+        json.dump(metrics, f, indent=4)
 
-    # -------------------- Test -------------------- #
-
-    print("\nGenerating test probabilities...")
-
-    test_probs = []
-
-    with torch.no_grad():
-        for input_ids, attention_mask in test_loader:
-
-            input_ids = input_ids.to(device)
-            attention_mask = attention_mask.to(device)
-
-            logits = model(input_ids, attention_mask)
-            probs = torch.sigmoid(logits)
-
-            test_probs.append(probs.cpu())
-
-    test_probs = torch.cat(test_probs, dim=0).numpy()
-
-    np.save(f"{ARTIFACT_DIR}/ftbert_test_probs.npy", test_probs)
-
-    print("Saved FT-BERT val and test probabilities.")
+    print("Saved metrics to artifacts/results/ftbert_metrics.json")
 
 
 if __name__ == "__main__":

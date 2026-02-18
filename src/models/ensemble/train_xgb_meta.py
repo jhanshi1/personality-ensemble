@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import json
 from sklearn.multiclass import OneVsRestClassifier
 from xgboost import XGBClassifier
 from src.utils.evaluation import evaluate_predictions
@@ -10,8 +11,10 @@ from src.data.loader import load_pre_split_data
 CLASSIC_DIR = "artifacts/classic"
 DL_DIR = "artifacts/dl_data"
 ENSEMBLE_DIR = "artifacts/ensemble"
+RESULTS_DIR = "artifacts/results"
 
 os.makedirs(ENSEMBLE_DIR, exist_ok=True)
+os.makedirs(RESULTS_DIR, exist_ok=True)
 
 
 # -------- File Loaders -------- #
@@ -33,10 +36,6 @@ def load_dl(name):
 # -------- Interaction Features -------- #
 
 def add_interaction_features(X):
-    """
-    Add pairwise trait interactions from FT-BERT probabilities.
-    Assumes last 5 columns belong to FT-BERT.
-    """
 
     ftbert_probs = X[:, -5:]
 
@@ -57,13 +56,12 @@ def add_interaction_features(X):
 
 def main():
 
-    print("Loading train + validation probabilities (for meta-training)...")
+    print("Loading train + validation probabilities...")
 
-    # -------- Load TRAIN probabilities -------- #
+    # -------- TRAIN probs -------- #
 
     train_lr = load_classic("lr_train_probs.npy")
     train_svm = load_classic("svm_train_probs.npy")
-
     train_bigru = load_dl("bigru_train_probs.npy")
     train_bilstm = load_dl("bilstm_bert_train_probs.npy")
     train_cnn = load_dl("cnn_bert_train_probs.npy")
@@ -78,11 +76,10 @@ def main():
         train_ftbert
     ])
 
-    # -------- Load VAL probabilities -------- #
+    # -------- VAL probs -------- #
 
     val_lr = load_classic("lr_val_probs.npy")
     val_svm = load_classic("svm_val_probs.npy")
-
     val_bigru = load_dl("bigru_val_probs.npy")
     val_bilstm = load_dl("bilstm_bert_val_probs.npy")
     val_cnn = load_dl("cnn_bert_val_probs.npy")
@@ -97,22 +94,21 @@ def main():
         val_ftbert
     ])
 
-    # -------- Combine Train + Val -------- #
+    # -------- Combine -------- #
 
     X_meta_train = np.vstack([X_train_meta, X_val_meta])
     X_meta_train = add_interaction_features(X_meta_train)
 
-    print("Meta training feature shape:", X_meta_train.shape)
+    print("Meta training shape:", X_meta_train.shape)
 
-    # -------- Load Labels -------- #
+    # -------- Load labels -------- #
 
     X_train, X_val, X_test, y_train, y_val, y_test = load_pre_split_data()
-
     y_meta_train = np.vstack([y_train, y_val])
 
     # -------- Train Meta Model -------- #
 
-    print("Training XGBoost meta-classifier on 80% data...")
+    print("Training XGBoost meta-classifier...")
 
     xgb = OneVsRestClassifier(
         XGBClassifier(
@@ -128,13 +124,12 @@ def main():
 
     xgb.fit(X_meta_train, y_meta_train)
 
-    # -------- Load TEST probabilities -------- #
+    # -------- TEST probs -------- #
 
-    print("\nLoading test probabilities (for evaluation)...")
+    print("\nLoading test probabilities...")
 
     test_lr = load_classic("lr_test_probs.npy")
     test_svm = load_classic("svm_test_probs.npy")
-
     test_bigru = load_dl("bigru_test_probs.npy")
     test_bilstm = load_dl("bilstm_bert_test_probs.npy")
     test_cnn = load_dl("cnn_bert_test_probs.npy")
@@ -151,9 +146,9 @@ def main():
 
     X_test_meta = add_interaction_features(X_test_meta)
 
-    print("Meta test feature shape:", X_test_meta.shape)
+    print("Meta test shape:", X_test_meta.shape)
 
-    # -------- Evaluate on TEST -------- #
+    # -------- Evaluate -------- #
 
     test_probs = xgb.predict_proba(X_test_meta)
     test_preds = (test_probs >= 0.5).astype(int)
@@ -161,17 +156,22 @@ def main():
     metrics = evaluate_predictions(
         y_test,
         test_preds,
-        name="XGBoost Stacked TEST (Train+Val Meta)"
+        name="XGBoost Stacked TEST"
     )
 
     print(metrics)
 
-    # -------- Save -------- #
+    # -------- Save outputs -------- #
 
     np.save(os.path.join(ENSEMBLE_DIR, "xgb_test_probs.npy"), test_probs)
     np.save(os.path.join(ENSEMBLE_DIR, "xgb_test_preds.npy"), test_preds)
 
-    print("Saved final ensemble test predictions.")
+    # -------- Save metrics JSON -------- #
+
+    with open(f"{RESULTS_DIR}/xgb_metrics.json", "w") as f:
+        json.dump(metrics, f, indent=4)
+
+    print("Saved metrics to artifacts/results/xgb_metrics.json")
 
 
 if __name__ == "__main__":
