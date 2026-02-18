@@ -70,6 +70,28 @@ def main():
 
         avg_loss = total_loss / len(train_loader)
         print(f"Epoch {epoch+1}/{EPOCHS} - Train Loss: {avg_loss:.4f}")
+        # ---- Generate TRAIN Probabilities ----
+    print("\nGenerating train probabilities...")
+
+    model.eval()
+    train_probs = []
+
+    with torch.no_grad():
+        for input_ids, attention_mask, labels in train_loader:
+
+            input_ids = input_ids.to(device)
+            attention_mask = attention_mask.to(device)
+
+            logits = model(input_ids, attention_mask)
+            probs = torch.sigmoid(logits)
+
+            train_probs.append(probs.cpu())
+
+    train_probs = torch.cat(train_probs, dim=0).numpy()
+
+    np.save(f"{ARTIFACT_DIR}/cnn_bert_train_probs.npy", train_probs)
+
+    print("Saved cnn_bert_train_probs.npy", train_probs.shape)
 
     # ---- Validation ----
     print("\nEvaluating validation performance...")

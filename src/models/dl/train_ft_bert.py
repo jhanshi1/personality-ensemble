@@ -2,21 +2,51 @@ import torch
 import numpy as np
 import os
 from torch.utils.data import DataLoader, TensorDataset
-from src.models.dl.bilstm_bert import BiLSTMBERTClassifier
+from transformers import BertModel
 from src.data.loader import load_pre_split_data
 from src.data.bert_preprocess import tokenize_bert
 from src.utils.evaluation import evaluate_predictions
 
+# -------------------- Config -------------------- #
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 BATCH_SIZE = 16
-EPOCHS = 10
+EPOCHS = 4
 LR = 2e-5
 MAX_LEN = 64
+NUM_LABELS = 5
 
 ARTIFACT_DIR = "artifacts/dl_data"
 os.makedirs(ARTIFACT_DIR, exist_ok=True)
 
+
+# -------------------- Model -------------------- #
+
+class FineTunedBERT(torch.nn.Module):
+
+    def __init__(self):
+        super().__init__()
+
+        self.bert = BertModel.from_pretrained("bert-base-uncased")
+        self.dropout = torch.nn.Dropout(0.3)
+        self.classifier = torch.nn.Linear(768, NUM_LABELS)
+
+    def forward(self, input_ids, attention_mask):
+
+        outputs = self.bert(
+            input_ids=input_ids,
+            attention_mask=attention_mask
+        )
+
+        pooled_output = outputs.pooler_output
+        x = self.dropout(pooled_output)
+        logits = self.classifier(x)
+
+        return logits
+
+
+# -------------------- Training Script -------------------- #
 
 def main():
 
@@ -39,13 +69,12 @@ def main():
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE)
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE)
 
-    model = BiLSTMBERTClassifier()
-    model.to(device)
+    model = FineTunedBERT().to(device)
 
     criterion = torch.nn.BCEWithLogitsLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=LR)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
 
-    print("\nStarting training...")
+    print("\nStarting fine-tuning...")
 
     for epoch in range(EPOCHS):
 
@@ -64,13 +93,20 @@ def main():
             loss = criterion(logits, labels)
 
             loss.backward()
+
+            # Gradient clipping (important for stability)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
             optimizer.step()
 
             total_loss += loss.item()
 
         avg_loss = total_loss / len(train_loader)
         print(f"Epoch {epoch+1}/{EPOCHS} - Train Loss: {avg_loss:.4f}")
-        # ---- Generate TRAIN Probabilities ----
+
+    print("\nTraining complete.")
+        # -------------------- Train Probabilities -------------------- #
+
     print("\nGenerating train probabilities...")
 
     model.eval()
@@ -89,11 +125,12 @@ def main():
 
     train_probs = torch.cat(train_probs, dim=0).numpy()
 
-    np.save(f"{ARTIFACT_DIR}/bilstm_bert_train_probs.npy", train_probs)
+    np.save(f"{ARTIFACT_DIR}/ftbert_train_probs.npy", train_probs)
 
-    print("Saved bilstm_bert_train_probs.npy", train_probs.shape)
+    print("Saved ftbert_train_probs.npy", train_probs.shape)
 
-    # ---- Validation ----
+    # -------------------- Validation -------------------- #
+
     print("\nEvaluating validation performance...")
 
     model.eval()
@@ -116,15 +153,15 @@ def main():
     metrics = evaluate_predictions(
         y_val.numpy(),
         val_preds,
-        name="BiLSTM+BERT Validation"
+        name="Fine-Tuned BERT Validation"
     )
 
     print(metrics)
 
-    # ---- Save Validation Probabilities ----
-    np.save(f"{ARTIFACT_DIR}/bilstm_bert_val_probs.npy", val_probs)
+    np.save(f"{ARTIFACT_DIR}/ftbert_val_probs.npy", val_probs)
 
-    # ---- Test Probabilities ----
+    # -------------------- Test -------------------- #
+
     print("\nGenerating test probabilities...")
 
     test_probs = []
@@ -142,9 +179,9 @@ def main():
 
     test_probs = torch.cat(test_probs, dim=0).numpy()
 
-    np.save(f"{ARTIFACT_DIR}/bilstm_bert_test_probs.npy", test_probs)
+    np.save(f"{ARTIFACT_DIR}/ftbert_test_probs.npy", test_probs)
 
-    print("Saved BiLSTM+BERT val and test probabilities.")
+    print("Saved FT-BERT val and test probabilities.")
 
 
 if __name__ == "__main__":

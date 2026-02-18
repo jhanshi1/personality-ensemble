@@ -114,24 +114,32 @@ if __name__ == "__main__":
     evaluate_model(model, X_train_vec, y_train, "Train")
     evaluate_model(model, X_val_vec, y_val, "Validation")
     evaluate_model(model, X_test_vec, y_test, "Test")
-
     # ---- Save Probabilities for Stacking ----
     print("\nSaving LR probabilities for stacking...")
 
+    # Train probabilities
+    lr_train_probs = model.predict_proba(X_train_vec)
     lr_val_probs = model.predict_proba(X_val_vec)
     lr_test_probs = model.predict_proba(X_test_vec)
 
     # Handle OneVsRestClassifier output shape safety
+    if isinstance(lr_train_probs, list):
+        lr_train_probs = np.column_stack([p[:, 1] for p in lr_train_probs])
+
     if isinstance(lr_val_probs, list):
         lr_val_probs = np.column_stack([p[:, 1] for p in lr_val_probs])
 
     if isinstance(lr_test_probs, list):
         lr_test_probs = np.column_stack([p[:, 1] for p in lr_test_probs])
 
+    # Save all three
+    np.save(f"{ARTIFACT_DIR}/lr_train_probs.npy", lr_train_probs)
     np.save(f"{ARTIFACT_DIR}/lr_val_probs.npy", lr_val_probs)
     np.save(f"{ARTIFACT_DIR}/lr_test_probs.npy", lr_test_probs)
 
     print("Saved:")
+    print(" - lr_train_probs.npy", lr_train_probs.shape)
     print(" - lr_val_probs.npy", lr_val_probs.shape)
     print(" - lr_test_probs.npy", lr_test_probs.shape)
 
+    
