@@ -17,3 +17,5 @@ xgboost
 tqdm
 joblib
 pyyaml
+
+uvicorn

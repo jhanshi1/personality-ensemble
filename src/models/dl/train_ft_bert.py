@@ -105,6 +105,15 @@ def main():
         print(f"Epoch {epoch+1}/{EPOCHS} - Train Loss: {avg_loss:.4f}")
 
     print("\nTraining complete.")
+    MODEL_DIR = "artifacts/deep"
+    os.makedirs(MODEL_DIR, exist_ok=True)
+
+    torch.save({
+        "model_state_dict": model.state_dict(),
+    }, os.path.join(MODEL_DIR, "ft_bert_model.pt"))
+
+    print("Saved FT-BERT model.")
+
     model.eval()
 
     # -------------------- TRAIN PROBS -------------------- #

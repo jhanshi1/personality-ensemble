@@ -2,25 +2,36 @@ import json
 import os
 import matplotlib.pyplot as plt
 
-RESULTS_PATH = "artifacts/results/metrics_summary.json"
-OUTPUT_DIR = "artifacts/results"
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+RESULTS_DIR = "artifacts/results"
+OUTPUT_PATH = os.path.join(RESULTS_DIR, "model_comparison_bar.png")
 
 
 def main():
 
-    if not os.path.exists(RESULTS_PATH):
-        raise FileNotFoundError(
-            "metrics_summary.json not found. "
-            "Create it inside artifacts/results/"
-        )
+    if not os.path.exists(RESULTS_DIR):
+        raise FileNotFoundError("artifacts/results folder not found")
 
-    # Load results
-    with open(RESULTS_PATH, "r") as f:
-        metrics = json.load(f)
+    models = []
+    f1_scores = []
 
-    models = list(metrics.keys())
-    f1_scores = list(metrics.values())
+    for file in os.listdir(RESULTS_DIR):
+
+        if file.endswith("_metrics.json"):
+
+            path = os.path.join(RESULTS_DIR, file)
+
+            with open(path, "r") as f:
+                data = json.load(f)
+
+            model_name = file.replace("_metrics.json", "")
+            f1_macro = data.get("f1_macro", None)
+
+            if f1_macro is not None:
+                models.append(model_name)
+                f1_scores.append(f1_macro)
+
+    if not models:
+        raise ValueError("No metrics JSON files found.")
 
     # Sort by F1 descending
     sorted_pairs = sorted(
@@ -40,15 +51,14 @@ def main():
     plt.title("Model Comparison (Test Macro F1)")
     plt.ylim(min(f1_sorted) - 0.02, max(f1_sorted) + 0.02)
 
-    # Annotate bars
     for i, v in enumerate(f1_sorted):
         plt.text(i, v + 0.001, f"{v:.3f}", ha='center')
 
     plt.tight_layout()
-    plt.savefig(f"{OUTPUT_DIR}/model_comparison_bar.png")
+    plt.savefig(OUTPUT_PATH)
     plt.show()
 
-    print("Saved plot to artifacts/results/model_comparison_bar.png")
+    print(f"Saved plot to {OUTPUT_PATH}")
 
 
 if __name__ == "__main__":

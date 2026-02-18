@@ -5,7 +5,7 @@ from scipy.sparse import csr_matrix, hstack
 import numpy as np
 import os
 import json
-
+import joblib
 from src.utils.evaluation import evaluate_model
 from src.data.loader import load_pre_split_data
 from src.features.pos_features import extract_pos_features
@@ -58,7 +58,9 @@ def build_features(X_train, X_val, X_test):
     X_val_vec = hstack([X_val_word, X_val_char, pos_val, emo_val])
     X_test_vec = hstack([X_test_word, X_test_char, pos_test, emo_test])
 
-    return X_train_vec, X_val_vec, X_test_vec
+    return (
+    X_train_vec, X_val_vec, X_test_vec,
+    word_vectorizer, char_vectorizer )
 
 
 def train_lr(X_train, y_train):
@@ -88,12 +90,21 @@ if __name__ == "__main__":
     X_train, X_val, X_test, y_train, y_val, y_test = load_pre_split_data()
 
     print("Building features...")
-    X_train_vec, X_val_vec, X_test_vec = build_features(
+    X_train_vec, X_val_vec, X_test_vec,word_vectorizer,char_vectorizer= build_features(
         X_train, X_val, X_test
     )
 
     print("Training Logistic Regression...")
     model = train_lr(X_train_vec, y_train)
+        
+
+    print("\nSaving LR model and vectorizers...")
+
+    joblib.dump(model, f"{ARTIFACT_DIR}/lr_model.pkl")
+    joblib.dump(word_vectorizer, f"{ARTIFACT_DIR}/word_vectorizer.pkl")
+    joblib.dump(char_vectorizer, f"{ARTIFACT_DIR}/char_vectorizer.pkl")
+
+    print("Saved LR model and vectorizers.")
 
     # ---- Evaluation ----
     evaluate_model(model, X_train_vec, y_train, "Train")
