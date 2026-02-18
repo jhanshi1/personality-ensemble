@@ -57,20 +57,38 @@ def add_interaction_features(X):
 
 def main():
 
-    print("Loading validation probabilities (for training meta-model)...")
+    print("Loading train + validation probabilities (for meta-training)...")
 
-    # Classic validation probs
+    # -------- Load TRAIN probabilities -------- #
+
+    train_lr = load_classic("lr_train_probs.npy")
+    train_svm = load_classic("svm_train_probs.npy")
+
+    train_bigru = load_dl("bigru_train_probs.npy")
+    train_bilstm = load_dl("bilstm_bert_train_probs.npy")
+    train_cnn = load_dl("cnn_bert_train_probs.npy")
+    train_ftbert = load_dl("ftbert_train_probs.npy")
+
+    X_train_meta = np.hstack([
+        train_lr,
+        train_svm,
+        train_bigru,
+        train_bilstm,
+        train_cnn,
+        train_ftbert
+    ])
+
+    # -------- Load VAL probabilities -------- #
+
     val_lr = load_classic("lr_val_probs.npy")
     val_svm = load_classic("svm_val_probs.npy")
 
-    # Deep validation probs
     val_bigru = load_dl("bigru_val_probs.npy")
     val_bilstm = load_dl("bilstm_bert_val_probs.npy")
     val_cnn = load_dl("cnn_bert_val_probs.npy")
     val_ftbert = load_dl("ftbert_val_probs.npy")
 
-    # Concatenate
-    X_val = np.hstack([
+    X_val_meta = np.hstack([
         val_lr,
         val_svm,
         val_bigru,
@@ -79,16 +97,22 @@ def main():
         val_ftbert
     ])
 
-    X_val = add_interaction_features(X_val)
+    # -------- Combine Train + Val -------- #
 
-    print("Meta training feature shape:", X_val.shape)
+    X_meta_train = np.vstack([X_train_meta, X_val_meta])
+    X_meta_train = add_interaction_features(X_meta_train)
 
-    # Load labels
-    _, _, _, _, y_val, y_test = load_pre_split_data()
+    print("Meta training feature shape:", X_meta_train.shape)
 
-    # -------- Train Meta-Model -------- #
+    # -------- Load Labels -------- #
 
-    print("Training XGBoost meta-classifier...")
+    X_train, X_val, X_test, y_train, y_val, y_test = load_pre_split_data()
+
+    y_meta_train = np.vstack([y_train, y_val])
+
+    # -------- Train Meta Model -------- #
+
+    print("Training XGBoost meta-classifier on 80% data...")
 
     xgb = OneVsRestClassifier(
         XGBClassifier(
@@ -102,9 +126,9 @@ def main():
         )
     )
 
-    xgb.fit(X_val, y_val)
+    xgb.fit(X_meta_train, y_meta_train)
 
-    # -------- Load Test Meta Features -------- #
+    # -------- Load TEST probabilities -------- #
 
     print("\nLoading test probabilities (for evaluation)...")
 
@@ -116,7 +140,7 @@ def main():
     test_cnn = load_dl("cnn_bert_test_probs.npy")
     test_ftbert = load_dl("ftbert_test_probs.npy")
 
-    X_test = np.hstack([
+    X_test_meta = np.hstack([
         test_lr,
         test_svm,
         test_bigru,
@@ -125,24 +149,24 @@ def main():
         test_ftbert
     ])
 
-    X_test = add_interaction_features(X_test)
+    X_test_meta = add_interaction_features(X_test_meta)
 
-    print("Meta test feature shape:", X_test.shape)
+    print("Meta test feature shape:", X_test_meta.shape)
 
     # -------- Evaluate on TEST -------- #
 
-    test_probs = xgb.predict_proba(X_test)
+    test_probs = xgb.predict_proba(X_test_meta)
     test_preds = (test_probs >= 0.5).astype(int)
 
     metrics = evaluate_predictions(
         y_test,
         test_preds,
-        name="XGBoost Stacked TEST"
+        name="XGBoost Stacked TEST (Train+Val Meta)"
     )
 
     print(metrics)
 
-    # -------- Save Final Predictions -------- #
+    # -------- Save -------- #
 
     np.save(os.path.join(ENSEMBLE_DIR, "xgb_test_probs.npy"), test_probs)
     np.save(os.path.join(ENSEMBLE_DIR, "xgb_test_preds.npy"), test_preds)
