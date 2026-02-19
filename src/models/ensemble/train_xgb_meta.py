@@ -172,6 +172,12 @@ def main():
         json.dump(metrics, f, indent=4)
 
     print("Saved metrics to artifacts/results/xgb_metrics.json")
+    import joblib
+
+    MODEL_SAVE_PATH = os.path.join(ENSEMBLE_DIR, "xgboost_meta.pkl")
+    joblib.dump(xgb, MODEL_SAVE_PATH)
+
+    print(f"Saved meta model to {MODEL_SAVE_PATH}")
 
 
 if __name__ == "__main__":

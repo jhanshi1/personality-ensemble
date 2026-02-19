@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Personality Perdictor</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<div class="container">
+
+    <header>
+        <h1> Personality Analyzer</h1>
+        <div class="card">
+            <h2>Models Used in This System</h2>
+            <ul class="model-list">
+                <li>Logistic Regression (TF + n-grams+pos+nrc)</li>
+                <li>Linear SVM (TF-IDF + POS + NRC+n-grams)</li>
+                <li>BiGRU (GloVe Embeddings)</li>
+                <li>CNN + BERT (Partial Unfreeze)</li>
+                <li>BiLSTM + BERT</li>
+                <li><strong>Fine-Tuned BERT (Final Production Model)</strong></li>
+            </ul>
+        </div>
+
+    </header>
+
+    <div class="card">
+        <textarea 
+            id="inputText" 
+            placeholder="Enter text to analyze..."
+        ></textarea>
+
+        <div class="buttons">
+            <button onclick="analyzeText()">Analyze</button>
+            <button class="secondary" onclick="resetForm()">Reset</button>
+        </div>
+
+        <div id="loading" class="hidden">
+            Analyzing ...
+        </div>
+    </div>
+
+    <div id="resultsSection" class="card hidden">
+    </div>
+
+
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
