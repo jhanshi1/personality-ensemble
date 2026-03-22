@@ -18,4 +18,4 @@ tqdm
 joblib
 pyyaml
 
-uvicorn
+uvicorn fastapi

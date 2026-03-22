@@ -1,10 +1,9 @@
-
+let radarChartInstance = null;
 
 async function analyzeText() {
 
     const text = document.getElementById("inputText").value;
     const loading = document.getElementById("loading");
-    const resultsSection = document.getElementById("resultsSection");
 
     if (text.length < 10) {
         alert("Please enter more text.");
@@ -12,7 +11,6 @@ async function analyzeText() {
     }
 
     loading.classList.remove("hidden");
-    resultsSection.classList.add("hidden");
 
     try {
 
@@ -24,7 +22,8 @@ async function analyzeText() {
 
         const data = await response.json();
 
-        displayResults(data);
+        displayPrimary(data.xgboost);
+        displayOtherModels(data);
 
     } catch (error) {
         alert("Error connecting to backend.");
@@ -34,25 +33,133 @@ async function analyzeText() {
     loading.classList.add("hidden");
 }
 
-function displayResults(data) {
+function displayPrimary(xgbData) {
 
-    const resultsSection = document.getElementById("resultsSection");
-    resultsSection.classList.remove("hidden");
+    const section = document.getElementById("primaryResult");
+    const traitsDiv = document.getElementById("primaryTraits");
 
-    resultsSection.innerHTML = `
-        <h2>Raw Prediction Output</h2>
-        <pre style="background:#000; padding:20px; border-radius:10px; overflow:auto;">
-${JSON.stringify(data, null, 2)}
-        </pre>
-    `;
+    section.classList.remove("hidden");
+
+    const labels = ["OPN", "CON", "EXT", "AGR", "NEU"];
+    const values = labels.map(trait => (xgbData[trait] * 100).toFixed(1));
+
+    traitsDiv.innerHTML = "";
+
+    labels.forEach((trait, i) => {
+        traitsDiv.innerHTML += `
+            <div class="trait-row">
+                <span>${trait}</span>
+                <span>${values[i]}%</span>
+            </div>
+        `;
+    });
+
+    const ctx = document.getElementById("radarChart").getContext("2d");
+
+    if (radarChartInstance) {
+        radarChartInstance.destroy();
+    }
+
+    radarChartInstance = new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels: labels,
+            datasets: [{
+                label: "XGBoost Prediction (%)",
+                data: values,
+                backgroundColor: [
+                    "#3b82f6",
+                    "#06b6d4",
+                    "#22c55e",
+                    "#f59e0b",
+                    "#ef4444"
+                ],
+                borderRadius: 10,
+                barThickness: 60
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    labels: {
+                        color: "#ffffff",
+                        font: { size: 16 }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: {
+                        color: "#ffffff",
+                        font: { size: 16 }
+                    },
+                    grid: {
+                        color: "rgba(255,255,255,0.05)"
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: {
+                        color: "#ffffff",
+                        font: { size: 14 }
+                    },
+                    grid: {
+                        color: "rgba(255,255,255,0.05)"
+                    }
+                }
+            }
+        }
+    });
 }
 
+function displayOtherModels(data) {
 
+    const comparison = document.getElementById("comparisonSection");
+    const container = document.getElementById("otherModels");
 
+    comparison.classList.remove("hidden");
+    container.innerHTML = "";
 
+    Object.entries(data).forEach(([model, traits]) => {
+
+        if (model === "xgboost") return;
+
+        let traitHTML = "";
+
+        Object.entries(traits).forEach(([trait, score]) => {
+
+            const percent = (score * 100).toFixed(1);
+
+            traitHTML += `
+                <div class="progress-row">
+                    <span>${trait}</span>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width:${percent}%"></div>
+                    </div>
+                    <span>${percent}%</span>
+                </div>
+            `;
+        });
+
+        container.innerHTML += `
+            <div class="model-card">
+                <h3>${model.toUpperCase()}</h3>
+                ${traitHTML}
+            </div>
+        `;
+    });
+}
 
 function resetForm() {
 
     document.getElementById("inputText").value = "";
-    document.getElementById("resultsSection").classList.add("hidden");
+
+    document.getElementById("primaryResult").classList.add("hidden");
+    document.getElementById("comparisonSection").classList.add("hidden");
+
+    if (radarChartInstance) {
+        radarChartInstance.destroy();
+    }
 }

@@ -5,4 +5,7 @@ __pycache__/
 data/processed/
 data/external/
 experiments/
-artifacts/
+artifacts/classic
+artifacts/deep
+artifacts/dl_data
+artifacts/ensemble

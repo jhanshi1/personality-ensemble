@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Personality Perdictor</title>
+    <title>Personality Analyzer</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -11,19 +11,7 @@
 <div class="container">
 
     <header>
-        <h1> Personality Analyzer</h1>
-        <div class="card">
-            <h2>Models Used in This System</h2>
-            <ul class="model-list">
-                <li>Logistic Regression (TF + n-grams+pos+nrc)</li>
-                <li>Linear SVM (TF-IDF + POS + NRC+n-grams)</li>
-                <li>BiGRU (GloVe Embeddings)</li>
-                <li>CNN + BERT (Partial Unfreeze)</li>
-                <li>BiLSTM + BERT</li>
-                <li><strong>Fine-Tuned BERT (Final Production Model)</strong></li>
-            </ul>
-        </div>
-
+        <h1>Personality Analyzer</h1>
     </header>
 
     <div class="card">
@@ -38,13 +26,22 @@
         </div>
 
         <div id="loading" class="hidden">
-            Analyzing ...
+            Analyzing...
         </div>
     </div>
 
-    <div id="resultsSection" class="card hidden">
+    <!-- PRIMARY OUTPUT -->
+    <div id="primaryResult" class="card hidden">
+        <h2> Final Personality Prediction (XGBoost)</h2>
+        <canvas id="radarChart"></canvas>
+        <div id="primaryTraits"></div>
     </div>
 
+    <!-- OTHER MODELS -->
+    <div id="comparisonSection" class="card hidden">
+        <h2>📊 Model Comparison</h2>
+        <div id="otherModels"></div>
+    </div>
 
 </div>
 

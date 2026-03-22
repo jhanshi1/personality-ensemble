@@ -7,13 +7,17 @@ KEEP_COLUMNS = [
     "cEXT", "cNEU", "cAGR", "cCON", "cOPN",
     "#AUTHID"
 ]
-def basic_text_clean(text):
+def basic_text_clean(text, aggressive=True):
     text = text.lower()
-    text = re.sub(r"http\S+", "", text)       # remove URLs
-    text = re.sub(r"@\w+", "", text)           # remove mentions
-    text = re.sub(r"[^a-z\s]", "", text)       # remove punctuation/numbers
-    text = re.sub(r"\s+", " ", text).strip()   # extra spaces
+    text = re.sub(r"http\S+", "", text)
+    text = re.sub(r"@\w+", "", text)
+
+    if aggressive:
+        text = re.sub(r"[^a-z\s]", "", text)
+
+    text = re.sub(r"\s+", " ", text).strip()
     return text
+
 
 def clean_dataset():
     df = pd.read_csv(RAW_DATA_PATH,encoding="latin1")
@@ -28,6 +32,7 @@ def clean_dataset():
     # Clean text
     df["status"] = df["status"].astype(str).apply(basic_text_clean)
     df = df[df["status"].str.len() > 0]
+    df = df[df["status"].str.split().str.len() >= 3]
     return df
 
 if __name__ == "__main__":
